@@ -10,7 +10,7 @@ import (
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	// "time"
-	"github.com/golang-module/carbon/v2"
+	// "github.com/golang-module/carbon/v2"
 )
 
 type order []struct {
@@ -32,9 +32,9 @@ type orderdetail struct {
 
 var orderlist []orderdetail
 
-func dateconvert(newdate string) (f string){
-		return carbon.ParseByFormat(newdate).ToDateTimeString()
-}
+// func dateconvert(newdate string) (f string){
+// 		return carbon.ParseByFormat(newdate).ToDateTimeString()
+// }
 
 func minorder() (val int){
 	//open connection to database
@@ -138,7 +138,7 @@ func main() {
 			temporder.Date_created=orders[i].Date_created
 			temporder.Order_total=orders[i].Order_total
 			orderlist = append(orderlist,temporder)
-			fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: "+dateconvert(temporder.Date_created))
+			fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: "+temporder.Date_created)
 	}
 
 	fmt.Println("Final Data: ",orderlist)
