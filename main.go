@@ -33,7 +33,7 @@ type orderdetail struct {
 var orderlist []orderdetail
 
 func dateconvert(newdate string) (f string){
-		return carbon.Parse(newdate).ToDateTimeString()
+		return carbon.ParseByFormat(newdate).ToDateTimeString()
 }
 
 func minorder() (val int){
@@ -99,7 +99,7 @@ func main() {
 
 	fmt.Println("Finding starting order...")
 	minid := minorder() + 1
-	minid = 66717
+	// minid = 66717
 	url := "https://api.bigcommerce.com/stores/"+os.Getenv("BIGCOMMERCE_STOREID")+"/v2/orders?min_id="+strconv.Itoa(minid)+"&sort=id:asc&limit="+limit
 
 	fmt.Println("Creating Request...")
