@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
+	// "time"
+	"github.com/golang-module/carbon/v2"
 )
 
 type order []struct {
@@ -29,6 +31,10 @@ type orderdetail struct {
 }
 
 var orderlist []orderdetail
+
+func dateconvert(newdate string) (f string){
+		return carbon.Parse(newdate).ToDateTimeString()
+}
 
 func minorder() (val int){
 	//open connection to database
@@ -76,7 +82,6 @@ func orderinsert(orders order) {
 
 	for i := range orders {
 		var newquery string = "INSERT INTO `orders`(`id`,`statusid`,`date_created`,`items_total`,`order_total`) VALUES (?,?,?,?,?)"
-		// fmt.Println(newquery)
 		rows, err := db.Query(newquery,orders[i].ID,orders[i].Status_ID,orders[i].Date_created,orders[i].Items_total,orders[i].Order_total)
 		if err != nil {
 			fmt.Println("Message: ",err.Error())
@@ -94,7 +99,7 @@ func main() {
 
 	fmt.Println("Finding starting order...")
 	minid := minorder() + 1
-	// minid = 66717
+	minid = 66717
 	url := "https://api.bigcommerce.com/stores/"+os.Getenv("BIGCOMMERCE_STOREID")+"/v2/orders?min_id="+strconv.Itoa(minid)+"&sort=id:asc&limit="+limit
 
 	fmt.Println("Creating Request...")
@@ -123,7 +128,7 @@ func main() {
 	}
 
 	fmt.Println("Inserting Orders...")
-	orderinsert(orders)
+	// orderinsert(orders)
 
 	var temporder orderdetail
 	for i := range orders {
@@ -133,7 +138,7 @@ func main() {
 			temporder.Date_created=orders[i].Date_created
 			temporder.Order_total=orders[i].Order_total
 			orderlist = append(orderlist,temporder)
-			fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: "+temporder.Date_created)
+			fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: "+dateconvert(temporder.Date_created))
 	}
 
 	fmt.Println("Final Data: ",orderlist)
