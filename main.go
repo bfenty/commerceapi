@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
-	// "time"
+	"time"
 	// "github.com/golang-module/carbon/v2"
 )
 
@@ -25,16 +25,12 @@ type order []struct {
 type orderdetail struct {
 	ID int
 	Status_ID int
-	Date_created string
+	Date_created time.Time
 	Items_total int
 	Order_total string
 }
 
 var orderlist []orderdetail
-
-// func dateconvert(newdate string) (f string){
-// 		return carbon.ParseByFormat(newdate).ToDateTimeString()
-// }
 
 func minorder() (val int){
 	//open connection to database
@@ -81,8 +77,9 @@ func orderinsert(orders order) {
 	}
 
 	for i := range orders {
-		var newquery string = "INSERT INTO `orders`(`id`,`statusid`,`date_created`,`items_total`,`order_total`) VALUES (?,?,?,?,?)"
-		rows, err := db.Query(newquery,orders[i].ID,orders[i].Status_ID,orders[i].Date_created,orders[i].Items_total,orders[i].Order_total)
+		var newquery string = "REPLACE INTO `orders`(`id`,`statusid`,`date_created`,`items_total`,`order_total`) VALUES (?,?,?,?,?)"
+		ordertime, _ := time.Parse("Mon, 02 Jan 2006 15:04:05 +0000",orders[i].Date_created)
+		rows, err := db.Query(newquery,orders[i].ID,orders[i].Status_ID,ordertime,orders[i].Items_total,orders[i].Order_total)
 		if err != nil {
 			fmt.Println("Message: ",err.Error())
 		}
@@ -96,6 +93,7 @@ func orderinsert(orders order) {
 func main() {
 	fmt.Println("Setting URL...")
 	limit := "100"
+	var err error
 
 	fmt.Println("Finding starting order...")
 	minid := minorder() + 1
@@ -106,7 +104,6 @@ func main() {
 	req, _ := http.NewRequest("GET", url, nil)
 
 	fmt.Println("Setting Headers...")
-	// req.Header.Add("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "commerce-client")
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("X-Auth-Token", os.Getenv("BIGCOMMERCE_TOKEN"))
@@ -128,22 +125,21 @@ func main() {
 	}
 
 	fmt.Println("Inserting Orders...")
-	// orderinsert(orders)
+	orderinsert(orders)
 
 	var temporder orderdetail
 	for i := range orders {
 			temporder.ID = orders[i].ID
 			temporder.Items_total=orders[i].Items_total
 			temporder.Status_ID=orders[i].Status_ID
-			temporder.Date_created=orders[i].Date_created
+			temporder.Date_created,err = time.Parse("Mon, 02 Jan 2006 15:04:05 +0000",orders[i].Date_created)
 			temporder.Order_total=orders[i].Order_total
 			orderlist = append(orderlist,temporder)
-			fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: "+temporder.Date_created)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: ",temporder.Date_created)
 	}
 
 	fmt.Println("Final Data: ",orderlist)
-
-	// fmt.Println(res)
-	// fmt.Println(string(body))
-
 }
