@@ -143,7 +143,7 @@ func main() {
 		fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: ", temporder.Date_created)
 	}
 
-	fmt.Println("Final Data: ", orderlist)
+	//fmt.Println("Final Data: ", orderlist)
 
 	qty()
 }

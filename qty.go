@@ -2,6 +2,7 @@ package main
 
 import (
 	// "encoding/csv"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -54,35 +55,39 @@ type sku struct {
 
 var skulist []sku
 
-// Write the results to csv
-// func csvmake() {
-// 	e := os.Remove("reorder.csv")
-// 	if e != nil {
-// 		log.Fatal(e)
-// 	}
-// 	file, err := os.Create("reorder.csv")
-// 	defer file.Close()
-// 	if err != nil {
-// 		log.Fatalf("failed creating file: %s", err)
-// 	}
+func QTYUpdate(skus []sku) {
 
-// 	w := csv.NewWriter(file)
-// 	defer w.Flush()
-// 	//Write Column headers
-// 	headers := []string{"SKU", "Qty", "Factory", "Supplier SKU"}
-// 	if err := w.Write(headers); err != nil {
-// 		log.Fatalln("error writing record to file", err)
-// 	}
-// 	// Using Write
-// 	for i := range skulist {
-// 		fmt.Println(i)
-// 		row := []string{skulist[i].SKU, strconv.Itoa(skulist[i].Qty), strconv.Itoa(skulist[i].Factory), skulist[i].SupplySKU}
-// 		fmt.Println("Row:", row)
-// 		if err := w.Write(row); err != nil {
-// 			log.Fatalln("error writing record to file", err)
-// 		}
-// 	}
-// }
+	//open connection to database
+	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/purchasing"
+	db, err := sql.Open("mysql",
+		connectstring)
+	if err != nil {
+		fmt.Println("Message: ", err.Error())
+	}
+
+	//Test Connection
+	pingErr := db.Ping()
+	if pingErr != nil {
+		fmt.Println("Message: ", err.Error())
+	}
+
+	for i := range skus {
+		var newquery string = "REPLACE INTO `qty`(`sku_internal`,`qty`,`prior_qty`) VALUES (?,?,?)"
+		// ordertime, _ := time.Parse("Mon, 02 Jan 2006 15:04:05 +0000", orders[i].Date_created)
+		rows, err := db.Query(newquery, skus[i].SKU, skus[i].Qty, 0)
+		defer rows.Close()
+		if err != nil {
+			fmt.Println("Message: ", err.Error())
+			rows.Close()
+		}
+		err = rows.Err()
+		if err != nil {
+			fmt.Println("Message: ", err.Error())
+			rows.Close()
+		}
+		rows.Close()
+	}
+}
 
 // Creates the URL by combining the url and link
 func urlmake(url string, linkvalue string) (urlfinal string) {
@@ -126,9 +131,9 @@ func jsonLoad(url string) (products product) {
 	jsonErr := json.Unmarshal(body, &products)
 	if jsonErr != nil {
 		log.Fatal(jsonErr)
-		fmt.Println("Body:", string(body))
+		// fmt.Println("Body:", string(body))
 	}
-	fmt.Println("Products:", products)
+	// fmt.Println("Products:", products)
 	return products
 }
 
@@ -147,6 +152,7 @@ func printProducts(products product) (page int, link string) {
 		skulist = append(skulist, tempsku)
 		//			}
 	}
+	QTYUpdate(skulist)
 	link = products.Meta.Pagination.Links.Next
 	return products.Meta.Pagination.CurrentPage, link
 }
@@ -161,7 +167,7 @@ func qty() {
 	//Define the Request URL
 	mindate := "2022-03-01"
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
-	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id&include=custom_fields&limit=" + strconv.Itoa(limit) + "&inventory_level=0&date_modified:min=" + mindate
+	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id&include=custom_fields&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
 	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/catalog/products"
 
 	//Loop through the pages
@@ -174,6 +180,6 @@ func qty() {
 		link = newlink
 		i = page
 	}
-	fmt.Println("Final Data:", skulist)
+	// fmt.Println("Final Data:", skulist)
 	// csvmake()
 }
