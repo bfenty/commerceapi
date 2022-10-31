@@ -144,4 +144,6 @@ func main() {
 	}
 
 	fmt.Println("Final Data: ", orderlist)
+
+	qty()
 }
