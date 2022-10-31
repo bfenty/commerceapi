@@ -100,6 +100,7 @@ func main() {
 	minid := minorder() + 1
 	// minid = 66717
 	url := "https://api.bigcommerce.com/stores/" + os.Getenv("BIGCOMMERCE_STOREID") + "/v2/orders?min_id=" + strconv.Itoa(minid) + "&sort=id:asc&limit=" + limit
+	fmt.Println("URL: ", url)
 
 	fmt.Println("Creating Request...")
 	req, _ := http.NewRequest("GET", url, nil)
