@@ -55,6 +55,38 @@ type sku struct {
 
 var skulist []sku
 
+func mindate() (val string) {
+	//open connection to database
+	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/purchasing"
+	db, err := sql.Open("mysql",
+		connectstring)
+	if err != nil {
+		fmt.Println("Message: ", err.Error())
+	}
+
+	//Test Connection
+	pingErr := db.Ping()
+	if pingErr != nil {
+		fmt.Println("Message: ", err.Error())
+	}
+
+	//Get start date
+	fmt.Println("Getting min date...")
+	var testquery string = "SELECT date_add(max(modified),INTERVAL -1 DAY) FROM `skus`"
+	rows2, err := db.Query(testquery)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	// var val string
+	if rows2.Next() {
+		rows2.Scan(&val)
+	}
+	fmt.Println("Min Date: ", val)
+	date, _ := time.Parse("2006-01-02 15:04:05", val)
+	fmt.Println("DATE: ", date.Format("2006-01-02"))
+	return date.Format("2006-01-02")
+}
+
 func QTYUpdate(skus []sku) {
 
 	//open connection to database
@@ -72,9 +104,8 @@ func QTYUpdate(skus []sku) {
 	}
 
 	for i := range skus {
-		var newquery string = "REPLACE INTO `qty`(`sku_internal`,`qty`,`prior_qty`) VALUES (?,?,?)"
-		// ordertime, _ := time.Parse("Mon, 02 Jan 2006 15:04:05 +0000", orders[i].Date_created)
-		rows, err := db.Query(newquery, skus[i].SKU, skus[i].Qty, 0)
+		var newquery string = "UPDATE `skus` SET `inventory_qty`=? WHERE sku_internal=?"
+		rows, err := db.Query(newquery, skus[i].Qty, skus[i].SKU)
 		defer rows.Close()
 		if err != nil {
 			fmt.Println("Message: ", err.Error())
@@ -146,9 +177,6 @@ func printProducts(products product) (page int, link string) {
 		tempsku.ID = products.Data[i].ID
 		tempsku.Factory = products.Data[i].Brand_ID
 		tempsku.SupplySKU = products.Data[i].MPN
-		//			if len(products.Data[i].Detail)>0 {tempsku.Factory=products.Data[i].Detail[0].Value}
-		//			if len(products.Data[i].Detail)>0 {tempsku.SupplySKU=products.Data[i].Detail[1].Value}
-		//			if tempsku.Qty==0 {
 		skulist = append(skulist, tempsku)
 		//			}
 	}
@@ -165,7 +193,8 @@ func qty() {
 	limit := 250
 
 	//Define the Request URL
-	mindate := "2022-03-01"
+	fmt.Println(mindate())
+	mindate := "2022-10-30"
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
 	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id&include=custom_fields&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
 	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/catalog/products"
