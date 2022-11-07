@@ -193,8 +193,9 @@ func qty() {
 	limit := 250
 
 	//Define the Request URL
-	fmt.Println(mindate())
-	mindate := "2022-10-30"
+	//fmt.Println(mindate())
+	mindate := mindate() //"2022-10-30"
+	fmt.Println(mindate)
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
 	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id&include=custom_fields&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
 	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/catalog/products"
