@@ -72,7 +72,7 @@ func mindate() (val string) {
 
 	//Get start date
 	fmt.Println("Getting min date...")
-	var testquery string = "SELECT date_add(max(modified),INTERVAL -14 DAY) FROM `skus`"
+	var testquery string = "SELECT date_add(max(modified),INTERVAL -60 DAY) FROM `skus`"
 	rows2, err := db.Query(testquery)
 	if err != nil {
 		fmt.Println(err.Error())
