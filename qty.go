@@ -22,6 +22,7 @@ type product struct {
 		InventoryWarningLevel int           `json:"inventory_warning_level"`
 		MPN                   string        `json:"mpn"`
 		Detail                []customfield `json:"custom_fields"`
+		Images                []Image       `json:"images"`
 	} `json:"data"`
 	Meta struct {
 		Pagination struct {
@@ -39,6 +40,12 @@ type product struct {
 	} `json:"meta"`
 }
 
+type Image struct {
+	URL_Standard *string `json:"url_standard"`
+	URL_Thumb    *string `json:"url_thumbnail"`
+	URL_Tiny     *string `json:"url_tiny"`
+}
+
 type customfield struct {
 	ID    int    `json:"id"`
 	Name  string `json:"name"`
@@ -51,6 +58,7 @@ type sku struct {
 	ID        int
 	Factory   int
 	SupplySKU string
+	Skuimage  Image
 }
 
 var skulist []sku
@@ -104,8 +112,9 @@ func QTYUpdate(skus []sku) {
 	}
 
 	for i := range skus {
-		var newquery string = "UPDATE `skus` SET `inventory_qty`=? WHERE sku_internal=?"
-		rows, err := db.Query(newquery, skus[i].Qty, skus[i].SKU)
+		var newquery string = "UPDATE `skus` SET `inventory_qty`=?,url_thumb=?,url_standard=?,url_tiny=? WHERE sku_internal=?"
+		rows, err := db.Query(newquery, skus[i].Qty, skus[i].Skuimage.URL_Thumb, skus[i].Skuimage.URL_Standard, skus[i].Skuimage.URL_Tiny, skus[i].SKU)
+
 		defer rows.Close()
 		if err != nil {
 			fmt.Println("Message: ", err.Error())
@@ -177,6 +186,9 @@ func printProducts(products product) (page int, link string) {
 		tempsku.ID = products.Data[i].ID
 		tempsku.Factory = products.Data[i].Brand_ID
 		tempsku.SupplySKU = products.Data[i].MPN
+		if len(products.Data[i].Images) > 0 {
+			tempsku.Skuimage = products.Data[i].Images[0]
+		}
 		skulist = append(skulist, tempsku)
 		//			}
 	}
@@ -197,7 +209,7 @@ func qty() {
 	mindate := mindate() //"2022-10-30"
 	fmt.Println(mindate)
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
-	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id&include=custom_fields&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
+	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id&include=images&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
 	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/catalog/products"
 
 	//Loop through the pages
