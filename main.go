@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	log "github.com/sirupsen/logrus"
 	// "github.com/golang-module/carbon/v2"
 )
 
@@ -39,25 +39,25 @@ func minorder() (val int) {
 	db, err := sql.Open("mysql",
 		connectstring)
 	if err != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	//Test Connection
 	pingErr := db.Ping()
 	if pingErr != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	var testquery string = "SELECT MAX(id) from orders"
 	rows2, err := db.Query(testquery)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Debug(err.Error())
 	}
 	// var val uint
 	if rows2.Next() {
 		rows2.Scan(&val)
 	}
-	fmt.Println(val)
+	log.Debug(val)
 	return val
 }
 
@@ -68,13 +68,13 @@ func orderinsert(orders order) {
 	db, err := sql.Open("mysql",
 		connectstring)
 	if err != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	//Test Connection
 	pingErr := db.Ping()
 	if pingErr != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	for i := range orders {
@@ -82,51 +82,57 @@ func orderinsert(orders order) {
 		ordertime, _ := time.Parse("Mon, 02 Jan 2006 15:04:05 +0000", orders[i].Date_created)
 		rows, err := db.Query(newquery, orders[i].ID, orders[i].Status_ID, ordertime, orders[i].Items_total, orders[i].Order_total)
 		if err != nil {
-			fmt.Println("Message: ", err.Error())
+			log.Debug("Message: ", err.Error())
 		}
 		err = rows.Err()
 		if err != nil {
-			fmt.Println("Message: ", err.Error())
+			log.Debug("Message: ", err.Error())
 		}
 	}
 }
 
 func main() {
-	fmt.Println("Setting URL...")
+	if os.Getenv("LOGLEVEL") == "DEBUG" {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.InfoLevel)
+	}
+	log.Info("Starting BigCommerce Update")
+	log.Debug("Setting URL...")
 	limit := "100"
 	var err error
 
-	fmt.Println("Finding starting order...")
+	log.Debug("Finding starting order...")
 	minid := minorder() + 1
 	// minid = 66717
 	url := "https://api.bigcommerce.com/stores/" + os.Getenv("BIGCOMMERCE_STOREID") + "/v2/orders?min_id=" + strconv.Itoa(minid) + "&sort=id:asc&limit=" + limit
-	fmt.Println("URL: ", url)
+	log.Debug("URL: ", url)
 
-	fmt.Println("Creating Request...")
+	log.Debug("Creating Request...")
 	req, _ := http.NewRequest("GET", url, nil)
 
-	fmt.Println("Setting Headers...")
+	log.Debug("Setting Headers...")
 	req.Header.Set("User-Agent", "commerce-client")
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("X-Auth-Token", os.Getenv("BIGCOMMERCE_TOKEN"))
 
-	fmt.Println("Executing Request...")
+	log.Debug("Executing Request...")
 	res, _ := http.DefaultClient.Do(req)
 
 	defer res.Body.Close()
 	body, _ := ioutil.ReadAll(res.Body)
 
-	fmt.Println("Creating Orders Structure...")
+	log.Debug("Creating Orders Structure...")
 	orders := order{}
 
-	fmt.Println("Loading JSON...")
+	log.Debug("Loading JSON...")
 	jsonErr := json.Unmarshal(body, &orders)
 	if jsonErr != nil {
-		fmt.Println(jsonErr.Error())
-		fmt.Println("Body:", string(body))
+		log.Debug(jsonErr.Error())
+		log.Debug("Body:", string(body))
 	}
 
-	fmt.Println("Inserting Orders...")
+	log.Debug("Inserting Orders...")
 	orderinsert(orders)
 
 	var temporder orderdetail
@@ -138,12 +144,13 @@ func main() {
 		temporder.Order_total = orders[i].Order_total
 		orderlist = append(orderlist, temporder)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Debug(err.Error())
 		}
-		fmt.Println("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: ", temporder.Date_created)
+		log.Debug("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: ", temporder.Date_created)
 	}
 
-	//fmt.Println("Final Data: ", orderlist)
+	//log.Debug("Final Data: ", orderlist)
 
 	qty()
+	log.Info("Completed update")
 }
