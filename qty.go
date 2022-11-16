@@ -4,13 +4,15 @@ import (
 	// "encoding/csv"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"log"
+
+	// "log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type product struct {
@@ -69,29 +71,29 @@ func mindate() (val string) {
 	db, err := sql.Open("mysql",
 		connectstring)
 	if err != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	//Test Connection
 	pingErr := db.Ping()
 	if pingErr != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	//Get start date
-	fmt.Println("Getting min date...")
+	log.Debug("Getting min date...")
 	var testquery string = "SELECT date_add(max(modified),INTERVAL -60 DAY) FROM `skus`"
 	rows2, err := db.Query(testquery)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Debug(err.Error())
 	}
 	// var val string
 	if rows2.Next() {
 		rows2.Scan(&val)
 	}
-	fmt.Println("Min Date: ", val)
+	log.Debug("Min Date: ", val)
 	date, _ := time.Parse("2006-01-02 15:04:05", val)
-	fmt.Println("DATE: ", date.Format("2006-01-02"))
+	log.Debug("DATE: ", date.Format("2006-01-02"))
 	return date.Format("2006-01-02")
 }
 
@@ -102,27 +104,43 @@ func QTYUpdate(skus []sku) {
 	db, err := sql.Open("mysql",
 		connectstring)
 	if err != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	//Test Connection
 	pingErr := db.Ping()
 	if pingErr != nil {
-		fmt.Println("Message: ", err.Error())
+		log.Debug("Message: ", err.Error())
 	}
 
 	for i := range skus {
+
 		var newquery string = "UPDATE `skus` SET `inventory_qty`=?,url_thumb=?,url_standard=?,url_tiny=? WHERE sku_internal=REPLACE(?,' ','')"
 		rows, err := db.Query(newquery, skus[i].Qty, skus[i].Skuimage.URL_Thumb, skus[i].Skuimage.URL_Standard, skus[i].Skuimage.URL_Tiny, skus[i].SKU)
 
 		defer rows.Close()
 		if err != nil {
-			fmt.Println("Message: ", err.Error())
+			log.Debug("Message: ", err.Error())
 			rows.Close()
 		}
 		err = rows.Err()
 		if err != nil {
-			fmt.Println("Message: ", err.Error())
+			log.Debug("Message: ", err.Error())
+			rows.Close()
+		}
+		rows.Close()
+
+		newquery = "INSERT INTO qty (sku_internal,inventory_qty,restock_qty,modified,restock_date) VALUES(REPLACE(?,' ',''),?,?,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()) ON DUPLICATE KEY UPDATE inventory_qty=?,restock_date=IF(?>restock_qty,CURRENT_TIMESTAMP(),restock_date),restock_qty=IF(?>restock_qty,?,restock_qty)"
+		rows, err = db.Query(newquery, skus[i].SKU, skus[i].Qty, skus[i].Qty, skus[i].Qty, skus[i].Qty, skus[i].Qty, skus[i].Qty)
+
+		defer rows.Close()
+		if err != nil {
+			log.Debug("Message: ", err.Error())
+			rows.Close()
+		}
+		err = rows.Err()
+		if err != nil {
+			log.Debug("Message: ", err.Error())
 			rows.Close()
 		}
 		rows.Close()
@@ -171,9 +189,9 @@ func jsonLoad(url string) (products product) {
 	jsonErr := json.Unmarshal(body, &products)
 	if jsonErr != nil {
 		log.Fatal(jsonErr)
-		// fmt.Println("Body:", string(body))
+		// log.Debug("Body:", string(body))
 	}
-	// fmt.Println("Products:", products)
+	// log.Debug("Products:", products)
 	return products
 }
 
@@ -205,23 +223,23 @@ func qty() {
 	limit := 250
 
 	//Define the Request URL
-	//fmt.Println(mindate())
+	//log.Debug(mindate())
 	mindate := mindate() //"2022-10-30"
-	fmt.Println(mindate)
+	log.Debug(mindate)
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
 	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id&include=images&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
 	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/catalog/products"
 
 	//Loop through the pages
 	totalpages := jsonLoad(urlmake(url, link)).Meta.Pagination.TotalPages
-	fmt.Println("Total Pages:", totalpages)
+	log.Debug("Total Pages:", totalpages)
 	i := 0
 	for i < totalpages {
 		page, newlink := printProducts(jsonLoad(urlmake(url, link)))
-		fmt.Println("Next Page Query:", page, newlink)
+		log.Debug("Next Page Query:", page, newlink)
 		link = newlink
 		i = page
 	}
-	// fmt.Println("Final Data:", skulist)
+	// log.Debug("Final Data:", skulist)
 	// csvmake()
 }
