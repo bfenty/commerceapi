@@ -37,12 +37,10 @@ func SSLoad() {
 	}
 
 	//encoding
-	data := []byte("d9169eb6ce9a408aa9b2743186e54dbb:2b0ceda973184fe194a5b70b56030843")
+	data := []byte(os.Getenv("SSKEKY") + ":" + os.Getenv("SSSECRET"))
 	dst := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
 	base64.StdEncoding.Encode(dst, data)
 	log.Debug("Auth: ", string(dst))
-
-	// log.Debug("Auth: ", base64.StdEncoding.Encode("d9169eb6ce9a408aa9b2743186e54dbb:2b0ceda973184fe194a5b70b56030843"))
 
 	req.Header.Add("Host", "ssapi.shipstation.com")
 	req.Header.Add("Authorization", string(dst))
