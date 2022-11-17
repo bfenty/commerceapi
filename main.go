@@ -29,6 +29,7 @@ type orderdetail struct {
 	Date_created time.Time
 	Items_total  int
 	Order_total  string
+	SKUS         []sku
 }
 
 var orderlist []orderdetail
