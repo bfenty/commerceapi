@@ -153,6 +153,6 @@ func main() {
 	//log.Debug("Final Data: ", orderlist)
 
 	SSLoad()
-	// qty()
+	qty()
 	log.Info("Completed update")
 }
