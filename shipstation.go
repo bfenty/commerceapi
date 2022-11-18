@@ -36,7 +36,7 @@ func SSLoad() {
 	limit := 250
 	page := 1
 	url := "https://ssapi.shipstation.com/orders"
-	link := "?orderDateStart=11-15-2022&pagesize=" + strconv.Itoa(limit) + "&page=" + strconv.Itoa(page)
+	link := "?orderDateStart=" + mindate() + "&pagesize=" + strconv.Itoa(limit) + "&page=" + strconv.Itoa(page)
 
 	temporder := ssjsonload(urlmake(url, link))
 
@@ -45,7 +45,7 @@ func SSLoad() {
 	for temporder.Page <= temporder.Pages {
 		log.Debug("Processing Page: ", page)
 		page = temporder.Page + 1
-		link = "?orderDateStart=11-15-2022&pagesize=" + strconv.Itoa(limit) + "&page=" + strconv.Itoa(page)
+		link = "?orderDateStart=" + mindate() + "&pagesize=" + strconv.Itoa(limit) + "&page=" + strconv.Itoa(page)
 		temporder = ssjsonload(urlmake(url, link))
 		ssorderinsert(processorder(temporder))
 	}
