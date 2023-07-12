@@ -233,7 +233,7 @@ func qty() {
 
 	//Define the Request URL
 	//log.Debug(mindate())
-	mindate := "2023-01-01" //mindate() //
+	mindate := mindate() //"2023-01-01"
 	log.Debug(mindate)
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
 	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id,date_modified,price&include=images&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
