@@ -26,6 +26,7 @@ type product struct {
 		Modified              string        `json:"date_modified"`
 		Detail                []customfield `json:"custom_fields"`
 		Images                []Image       `json:"images"`
+		Price                 float64       `json:"price"`
 	} `json:"data"`
 	Meta struct {
 		Pagination struct {
@@ -62,6 +63,7 @@ type sku struct {
 	Factory   int
 	SupplySKU string
 	Modified  string
+	Price     float64
 	Skuimage  Image
 }
 
@@ -117,8 +119,8 @@ func QTYUpdate(skus []sku) {
 
 	for i := range skus {
 
-		var newquery string = "UPDATE `skus` SET `inventory_qty`=?,url_thumb=?,url_standard=?,url_tiny=? WHERE sku_internal=REPLACE(?,' ','')"
-		rows, err := db.Query(newquery, skus[i].Qty, skus[i].Skuimage.URL_Thumb, skus[i].Skuimage.URL_Standard, skus[i].Skuimage.URL_Tiny, skus[i].SKU)
+		var newquery string = "UPDATE `skus` SET `inventory_qty`=?,price=?,url_thumb=?,url_standard=?,url_tiny=? WHERE sku_internal=REPLACE(?,' ','')"
+		rows, err := db.Query(newquery, skus[i].Qty, skus[i].Price, skus[i].Skuimage.URL_Thumb, skus[i].Skuimage.URL_Standard, skus[i].Skuimage.URL_Tiny, skus[i].SKU)
 
 		defer rows.Close()
 		if err != nil {
@@ -133,7 +135,7 @@ func QTYUpdate(skus []sku) {
 		}
 		rows.Close()
 
-		log.Debug("Modified Date: ", skus[i].Modified)
+		// log.Debug("Modified Date: ", skus[i].Modified)
 		newquery = "INSERT INTO qty (sku_internal,inventory_qty,restock_qty,modified,restock_date) VALUES(REPLACE(?,' ',''),?,?,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()) ON DUPLICATE KEY UPDATE inventory_qty=?,restock_date=IF(?>restock_qty,CURRENT_TIMESTAMP(),restock_date),restock_qty=IF(?>restock_qty,?,restock_qty),modified=CURRENT_TIMESTAMP()"
 		rows, err = db.Query(newquery, skus[i].SKU, skus[i].Qty, skus[i].Qty, skus[i].Qty, skus[i].Qty, skus[i].Qty, skus[i].Qty)
 
@@ -209,9 +211,11 @@ func printProducts(products product) (page int, link string) {
 		tempsku.Factory = products.Data[i].Brand_ID
 		tempsku.SupplySKU = products.Data[i].MPN
 		tempsku.Modified = products.Data[i].Modified
+		tempsku.Price = products.Data[i].Price
 		if len(products.Data[i].Images) > 0 {
 			tempsku.Skuimage = products.Data[i].Images[0]
 		}
+		log.Debug("tempsku: ", tempsku)
 		skulist = append(skulist, tempsku)
 		//			}
 	}
@@ -229,10 +233,10 @@ func qty() {
 
 	//Define the Request URL
 	//log.Debug(mindate())
-	mindate := mindate() //"2022-10-30"
+	mindate := mindate() //"2023-01-01"
 	log.Debug(mindate)
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
-	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id,date_modified&include=images&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
+	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id,date_modified,price&include=images&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
 	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/catalog/products"
 
 	//Loop through the pages
