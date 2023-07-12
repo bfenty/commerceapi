@@ -26,6 +26,7 @@ type product struct {
 		Modified              string        `json:"date_modified"`
 		Detail                []customfield `json:"custom_fields"`
 		Images                []Image       `json:"images"`
+		Price                 float64       `json:"price"`
 	} `json:"data"`
 	Meta struct {
 		Pagination struct {
@@ -232,7 +233,7 @@ func qty() {
 	mindate := mindate() //"2022-10-30"
 	log.Debug(mindate)
 	//link = "?include_fields=sku,inventory_level,inventory_warning_level,custom_fields&inventory_level=0&limit="+strconv.Itoa(limit)+"&date_modified:min="+mindate
-	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id,date_modified&include=images&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
+	link = "?include_fields=sku,inventory_level,inventory_warning_level,mpn,brand_id,date_modified&include=images,price&limit=" + strconv.Itoa(limit) + "&date_modified:min=" + mindate
 	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/catalog/products"
 
 	//Loop through the pages
