@@ -215,7 +215,7 @@ func printProducts(products product) (page int, link string) {
 		if len(products.Data[i].Images) > 0 {
 			tempsku.Skuimage = products.Data[i].Images[0]
 		}
-		log.Debug("tempsku: ", tempsku)
+		// log.Debug("tempsku: ", tempsku)
 		skulist = append(skulist, tempsku)
 		//			}
 	}

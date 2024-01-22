@@ -112,7 +112,7 @@ func processorder(ssorder SSOrder) (orders []orderdetail) {
 		temporder.Items_total = 0
 		for _, item := range order.Orderskus {
 			temporder.Items_total += item.QTY
-			log.Debug(temporder.ID, "/", item.SKU, "/", item.QTY, "/", temporder.Items_total)
+			// log.Debug(temporder.ID, "/", item.SKU, "/", item.QTY, "/", temporder.Items_total)
 		}
 		orders = append(orders, temporder)
 	}
