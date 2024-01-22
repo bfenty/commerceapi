@@ -150,8 +150,6 @@ func main() {
 		log.Debug("ID:"+strconv.Itoa(temporder.ID)+" Total: "+strconv.Itoa(temporder.Items_total)+" Status_ID: "+strconv.Itoa(temporder.Status_ID)+" Date Created: ", temporder.Date_created)
 	}
 
-	//log.Debug("Final Data: ", orderlist)
-
 	SSLoad()
 	qty()
 	log.Info("Completed update")
