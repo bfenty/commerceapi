@@ -14,7 +14,12 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
-	// "github.com/golang-module/carbon/v2"
+	"time"
+)
+
+const (
+	maxRetries    = 3                // Maximum number of retries
+	retryInterval = 10 * time.Second // Time to wait between retries
 )
 
 type SSOrder struct {
@@ -54,15 +59,19 @@ func SSLoad() {
 		log.Debug("Processing Page: ", page)
 		page = temporder.Page + 1
 		link = "?orderDateStart=" + mindate() + "&pagesize=" + strconv.Itoa(limit) + "&page=" + strconv.Itoa(page)
-		temporder, err = ssjsonload(urlmake(url, link))
-		if err != nil {
-			log.Error("Error loading JSON from ShipStation: ", err)
-			return
+
+		for i := 0; i < maxRetries; i++ {
+			temporder, err = ssjsonload(urlmake(url, link))
+			if err == nil {
+				break
+			}
+			log.Error("Error loading JSON from ShipStation, attempt ", i+1, " of ", maxRetries, ": ", err)
+			time.Sleep(retryInterval)
 		}
-		err = ssorderinsert(processorder(temporder))
+
 		if err != nil {
-			log.Error("Error inserting orders into the database: ", err)
-			return
+			log.Error("Failed to load JSON from ShipStation after ", maxRetries, " attempts: ", err)
+			break
 		}
 	}
 }
@@ -114,38 +123,53 @@ func processorder(ssorder SSOrder) (orders []orderdetail) {
 func ssjsonload(url string) (SSOrder, error) {
 	var Orders SSOrder
 
-	// Define the Request Client
-	method := "GET"
-	client := &http.Client{}
-	req, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		return Orders, fmt.Errorf("error creating new request: %v", err)
+	for i := 0; i < maxRetries; i++ {
+		// Define the Request Client
+		method := "GET"
+		client := &http.Client{}
+		req, err := http.NewRequest(method, url, nil)
+		if err != nil {
+			log.Error("Error creating new request, attempt ", i+1, " of ", maxRetries, ": ", err)
+			time.Sleep(retryInterval)
+			continue
+		}
+
+		// Authorization
+		data := []byte(os.Getenv("SSKEY") + ":" + os.Getenv("SSSECRET"))
+		dst := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
+		base64.StdEncoding.Encode(dst, data)
+		log.Debug("Auth: ", string(dst))
+
+		req.Header.Add("Host", "ssapi.shipstation.com")
+		req.Header.Add("Authorization", "Basic "+string(dst))
+
+		// Perform the request
+		res, err := client.Do(req)
+		if err != nil {
+			log.Error("Error executing request, attempt ", i+1, " of ", maxRetries, ": ", err)
+			time.Sleep(retryInterval)
+			continue
+		}
+
+		// Read and close the response body
+		body, err := ioutil.ReadAll(res.Body)
+		res.Body.Close() // Close the body when reading is done
+		if err != nil {
+			log.Error("Error reading response body, attempt ", i+1, " of ", maxRetries, ": ", err)
+			time.Sleep(retryInterval)
+			continue
+		}
+
+		// Unmarshal JSON
+		if jsonErr := json.Unmarshal(body, &Orders); jsonErr != nil {
+			log.Error("Error unmarshalling JSON, attempt ", i+1, " of ", maxRetries, ": ", jsonErr)
+			time.Sleep(retryInterval)
+			continue
+		}
+
+		return Orders, nil // Success, return the orders
 	}
 
-	// Authorization
-	data := []byte(os.Getenv("SSKEY") + ":" + os.Getenv("SSSECRET"))
-	dst := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
-	base64.StdEncoding.Encode(dst, data)
-	log.Debug("Auth: ", string(dst))
-
-	req.Header.Add("Host", "ssapi.shipstation.com")
-	req.Header.Add("Authorization", "Basic "+string(dst))
-
-	res, err := client.Do(req)
-	if err != nil {
-		return Orders, fmt.Errorf("error executing request: %v", err)
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return Orders, fmt.Errorf("error reading response body: %v", err)
-	}
-
-	// Unmarshal JSON
-	if jsonErr := json.Unmarshal(body, &Orders); jsonErr != nil {
-		return Orders, fmt.Errorf("error unmarshalling JSON: %v", jsonErr)
-	}
-
-	return Orders, nil
+	// All retries have been exhausted, return the error
+	return Orders, fmt.Errorf("failed to load data from ShipStation after %d attempts", maxRetries)
 }
