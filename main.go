@@ -14,6 +14,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	maxRetries    = 3                // Maximum number of retries
+	retryInterval = 10 * time.Second // Time to wait between retries
+)
+
 type order []struct {
 	ID             int    `json:"id"`
 	Status_ID      int    `json:"status_id"`
@@ -172,7 +177,7 @@ func main() {
 		log.Debug("Inserting Orders...")
 		orderinsert(orders)
 
-		// Processing orders (This part might need adjustment based on actual requirement)
+		// Processing orders
 		for _, o := range orders {
 			temporder := orderdetail{
 				ID:          o.ID,

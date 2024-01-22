@@ -86,7 +86,7 @@ func mindate() (val string) {
 
 	//Get start date
 	log.Debug("Getting min date...")
-	var testquery string = "SELECT date_add(max(modified),INTERVAL -14 DAY) FROM `skus`"
+	var testquery string = "SELECT date_add(max(modified),INTERVAL -3 DAY) FROM `skus`"
 	rows2, err := db.Query(testquery)
 	if err != nil {
 		log.Debug(err.Error())
@@ -215,7 +215,7 @@ func printProducts(products product) (page int, link string) {
 		if len(products.Data[i].Images) > 0 {
 			tempsku.Skuimage = products.Data[i].Images[0]
 		}
-		// log.Debug("tempsku: ", tempsku)
+		log.Debug("tempsku: ", tempsku)
 		skulist = append(skulist, tempsku)
 		//			}
 	}
