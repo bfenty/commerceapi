@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gosuri/uiprogress"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -67,57 +68,72 @@ type sku struct {
 	Skuimage  Image
 }
 
-var skulist []sku
-
 func mindate() (val string) {
 	//open connection to database
+	log.Info("Opening DB Connection")
 	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/purchasing"
 	db, err := sql.Open("mysql",
 		connectstring)
 	if err != nil {
-		log.Debug("Message: ", err.Error())
+		log.Error("Error opening Database: ", err.Error())
 	}
 
 	//Test Connection
 	pingErr := db.Ping()
 	if pingErr != nil {
-		log.Debug("Message: ", err.Error())
+		log.Error("Error testing DB Connection: ", err.Error())
 	}
 
 	//Get start date
-	log.Debug("Getting min date...")
+	log.Info("Getting min date...")
 	var testquery string = "SELECT date_add(max(modified),INTERVAL -3 DAY) FROM `skus`"
 	rows2, err := db.Query(testquery)
 	if err != nil {
-		log.Debug(err.Error())
+		log.Error("Error retrieving min date: ", err.Error())
 	}
 	// var val string
 	if rows2.Next() {
 		rows2.Scan(&val)
 	}
-	log.Debug("Min Date: ", val)
+	log.Info("Min Date: ", val)
 	date, _ := time.Parse("2006-01-02 15:04:05", val)
-	log.Debug("DATE: ", date.Format("2006-01-02"))
+	log.Info("DATE: ", date.Format("2006-01-02"))
 	return date.Format("2006-01-02")
 }
 
 func QTYUpdate(skus []sku) {
 
+	if len(skus) == 0 {
+		log.Info("No SKUs in Slice")
+		return
+	}
+
 	//open connection to database
+	log.Info("Opening DB Connection")
 	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/purchasing"
 	db, err := sql.Open("mysql",
 		connectstring)
 	if err != nil {
-		log.Error("Message: ", err.Error())
+		log.Error("Error opening Database: ", err.Error())
 	}
 
 	//Test Connection
 	pingErr := db.Ping()
 	if pingErr != nil {
-		log.Error("Message: ", err.Error())
+		log.Error("Error testing DB Connection: ", err.Error())
 	}
 
+	log.Info("Updating Quantity for ", len(skus), " SKUs")
+
+	// Initialize progress bar
+	log.Info("Updating Order QTY in Database")
+	uiprogress.Start()                                                     // start rendering
+	bar := uiprogress.AddBar(len(skus)).AppendCompleted().PrependElapsed() // add a new bar
+	bar.PrependFunc(func(b *uiprogress.Bar) string {
+		return "Processing: " // prepend the current processing state
+	})
 	for i := range skus {
+		bar.Incr() //update progress bar
 
 		var newquery string = "UPDATE `skus` SET `inventory_qty`=?,price=?,url_thumb=?,url_standard=?,url_tiny=? WHERE sku_internal=REPLACE(?,' ','')"
 		rows, err := db.Query(newquery, skus[i].Qty, skus[i].Price, skus[i].Skuimage.URL_Thumb, skus[i].Skuimage.URL_Standard, skus[i].Skuimage.URL_Tiny, skus[i].SKU)
@@ -125,12 +141,12 @@ func QTYUpdate(skus []sku) {
 		defer rows.Close()
 		if err != nil {
 
-			log.Error("Message: ", err.Error())
+			log.Error("Error Updating Qty: ", err.Error())
 			rows.Close()
 		}
 		err = rows.Err()
 		if err != nil {
-			log.Error("Message: ", err.Error())
+			log.Error("Error Updating Qty: ", err.Error())
 			rows.Close()
 		}
 		rows.Close()
@@ -203,6 +219,8 @@ func jsonLoad(url string) (products product) {
 
 // prints out the products slice
 func printProducts(products product) (page int, link string) {
+
+	var skulist []sku
 	var tempsku sku
 	for i := range products.Data {
 		tempsku.SKU = products.Data[i].Sku
@@ -215,7 +233,7 @@ func printProducts(products product) (page int, link string) {
 		if len(products.Data[i].Images) > 0 {
 			tempsku.Skuimage = products.Data[i].Images[0]
 		}
-		log.Debug("tempsku: ", tempsku)
+		// log.Debug("tempsku: ", tempsku)
 		skulist = append(skulist, tempsku)
 		//			}
 	}
@@ -242,8 +260,17 @@ func qty() {
 	//Loop through the pages
 	totalpages := jsonLoad(urlmake(url, link)).Meta.Pagination.TotalPages
 	log.Debug("Total Pages:", totalpages)
+	// Initialize progress bar
+	log.Info("Updating QTY")
+	uiprogress.Start()                                                      // start rendering
+	bar := uiprogress.AddBar(totalpages).AppendCompleted().PrependElapsed() // add a new bar
+	bar.PrependFunc(func(b *uiprogress.Bar) string {
+		return "Processing: " // prepend the current processing state
+	})
 	i := 0
 	for i < totalpages {
+		bar.Incr() //update progress bar
+		log.Info("Processing Page ", i)
 		page, newlink := printProducts(jsonLoad(urlmake(url, link)))
 		log.Debug("Next Page Query:", page, newlink)
 		link = newlink
