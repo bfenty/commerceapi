@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gosuri/uiprogress"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -47,6 +48,7 @@ var orderlist []orderdetail
 // minorder retrieves the maximum order ID from the database.
 func minorder() (val int) {
 	// Open connection to the database
+	log.Info("Connecting to DB")
 	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/orders"
 	db, err := sql.Open("mysql", connectstring)
 	if err != nil {
@@ -80,6 +82,11 @@ func minorder() (val int) {
 
 // orderinsert inserts the fetched orders into the database.
 func orderinsert(orders order) {
+
+	if len(orders) == 0 {
+		log.Info("No Orders in Slice")
+		return
+	}
 	// Open connection to database
 	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/orders"
 	db, err := sql.Open("mysql", connectstring)
@@ -94,23 +101,36 @@ func orderinsert(orders order) {
 		log.Error("Error pinging database: ", pingErr.Error())
 		return
 	}
-
+	// Initialize progress bar
+	log.Info("Inserting BigCommerce Orders into Database")
+	uiprogress.Start()                                                       // start rendering
+	bar := uiprogress.AddBar(len(orders)).AppendCompleted().PrependElapsed() // add a new bar
+	bar.PrependFunc(func(b *uiprogress.Bar) string {
+		return "Processing: " // prepend the current processing state
+	})
 	for _, o := range orders {
+		bar.Incr() //update progress bar
+		if o.ID == 0 {
+			continue
+		}
 		var newquery string = "REPLACE INTO `orders`(`id`,`statusid`,`date_created`,`items_total`,`order_total`, `email`, `customer_id`) VALUES (?,?,?,?,?,?,?)"
 		ordertime, err := time.Parse("Mon, 02 Jan 2006 15:04:05 +0000", o.Date_created)
 		if err != nil {
 			log.Error("Error parsing date: ", err.Error())
+			log.Error("Error on Order: ", o.ID, ",", o.Status_ID, ",", ordertime, ",", o.Items_total, ",", o.Order_total, ",", o.BillingAddress.Email, ",", o.CustomerID)
 			continue
 		}
 		_, err = db.Exec(newquery, o.ID, o.Status_ID, ordertime, o.Items_total, o.Order_total, o.BillingAddress.Email, o.CustomerID)
 		if err != nil {
 			log.Error("Error executing query: ", err.Error())
+			continue
 		}
 	}
 }
 
 // fetchOrders fetches orders from BigCommerce API and applies retry logic.
 func fetchOrders(url string) (order, error) {
+	log.Info("Fetching Orders from BigCommerce")
 	var orders order
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequest("GET", url, nil)
@@ -143,7 +163,7 @@ func fetchOrders(url string) (order, error) {
 		// Unmarshal JSON
 		if jsonErr := json.Unmarshal(body, &orders); jsonErr != nil {
 			log.Error("Error unmarshalling JSON, attempt ", i+1, " of ", maxRetries, ": ", jsonErr)
-			log.Debug("Body: ", string(body))
+			// log.Debug("Body: ", string(body))
 			time.Sleep(retryInterval)
 			continue
 		}
@@ -162,7 +182,7 @@ func main() {
 	}
 	log.Info("Starting BigCommerce Update")
 
-	limit := "100"
+	limit := "250"
 	minid := minorder() + 1
 	log.Debug("Minimum order ID: ", minid)
 
@@ -174,27 +194,8 @@ func main() {
 		log.Error("Failed to fetch orders: ", err)
 	} else {
 
-		log.Debug("Inserting Orders...")
+		log.Info("Inserting Orders...")
 		orderinsert(orders)
-
-		// Processing orders
-		for _, o := range orders {
-			temporder := orderdetail{
-				ID:          o.ID,
-				Items_total: o.Items_total,
-				Status_ID:   o.Status_ID,
-				Order_total: o.Order_total,
-				Email:       o.BillingAddress.Email,
-				CustomerID:  o.CustomerID,
-			}
-			temporder.Date_created, err = time.Parse("Mon, 02 Jan 2006 15:04:05 +0000", o.Date_created)
-			if err != nil {
-				log.Error("Error parsing date: ", err.Error())
-				continue
-			}
-			orderlist = append(orderlist, temporder)
-			log.Debug("Processed order ID:", temporder.ID)
-		}
 	}
 
 	SSLoad()
