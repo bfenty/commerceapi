@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/gosuri/uiprogress"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -74,25 +75,60 @@ type sku struct {
 // Customer Structs
 // Define the structs for the JSON structure
 type Address struct {
-	Address1        string `json:"address1"`
-	Address2        string `json:"address2"`
-	AddressType     string `json:"address_type"`
-	City            string `json:"city"`
-	Company         string `json:"company"`
-	Country         string `json:"country"`
-	CountryCode     string `json:"country_code"`
-	CustomerID      int    `json:"customer_id"`
-	FirstName       string `json:"first_name"`
-	ID              int    `json:"id"`
-	LastName        string `json:"last_name"`
-	Phone           string `json:"phone"`
-	PostalCode      string `json:"postal_code"`
-	StateOrProvince string `json:"state_or_province"`
+	ID              int           `json:"id"`
+	Address1        string        `json:"address1"`
+	Address2        string        `json:"address2"`
+	AddressType     string        `json:"address_type"`
+	City            string        `json:"city"`
+	Company         string        `json:"company"`
+	Country         string        `json:"country"`
+	CountryCode     string        `json:"country_code"`
+	CustomerID      int           `json:"customer_id"`
+	FirstName       string        `json:"first_name"`
+	LastName        string        `json:"last_name"`
+	Phone           string        `json:"phone"`
+	PostalCode      string        `json:"postal_code"`
+	StateOrProvince string        `json:"state_or_province"`
+	FormFields      []interface{} `json:"form_fields"` // Assuming form fields can be anything; adjust as necessary
+}
+
+type Authentication struct {
+	ForcePasswordReset bool `json:"force_password_reset"`
+}
+
+type StoreCredit struct {
+	Amount float64 `json:"amount"`
+}
+
+type Customer struct {
+	ID                                      int            `json:"id"`
+	AddressCount                            int            `json:"address_count"`
+	Addresses                               []Address      `json:"addresses"`
+	Attributes                              []interface{}  `json:"attributes"` // Assuming attributes can be anything; adjust as necessary
+	Authentication                          Authentication `json:"authentication"`
+	Company                                 string         `json:"company"`
+	CustomerGroupID                         int            `json:"customer_group_id"`
+	Email                                   string         `json:"email"`
+	FirstName                               string         `json:"first_name"`
+	LastName                                string         `json:"last_name"`
+	Notes                                   string         `json:"notes"`
+	Phone                                   string         `json:"phone"`
+	RegistrationIPAddress                   string         `json:"registration_ip_address"`
+	TaxExemptCategory                       string         `json:"tax_exempt_category"`
+	DateCreated                             string         `json:"date_created"`
+	DateModified                            string         `json:"date_modified"`
+	AttributeCount                          int            `json:"attribute_count"`
+	FormFields                              []interface{}  `json:"form_fields"` // Assuming form fields can be anything; adjust as necessary
+	AcceptsProductReviewAbandonedCartEmails bool           `json:"accepts_product_review_abandoned_cart_emails"`
+	StoreCreditAmounts                      []StoreCredit  `json:"store_credit_amounts"`
+	OriginChannelID                         int            `json:"origin_channel_id"`
+	ChannelIDs                              []int          `json:"channel_ids"` // Nullable, so it could be nil
 }
 
 type PaginationLinks struct {
-	Next    string `json:"next"`
-	Current string `json:"current"`
+	Previous string `json:"previous"`
+	Current  string `json:"current"`
+	Next     string `json:"next"`
 }
 
 type MetaPagination struct {
@@ -102,7 +138,6 @@ type MetaPagination struct {
 	CurrentPage int             `json:"current_page"`
 	TotalPages  int             `json:"total_pages"`
 	Links       PaginationLinks `json:"links"`
-	TooMany     bool            `json:"too_many"`
 }
 
 type Meta struct {
@@ -110,8 +145,8 @@ type Meta struct {
 }
 
 type CustomersResponse struct {
-	Data []Address `json:"data"`
-	Meta Meta      `json:"meta"`
+	Data []Customer `json:"data"`
+	Meta Meta       `json:"meta"`
 }
 
 func mindate() (val string) {
@@ -327,21 +362,21 @@ func qty() {
 }
 
 func customers() {
-
-	//open connection to database
+	// Open connection to database
 	log.Info("Opening DB Connection")
 	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/purchasing"
-	db, err := sql.Open("mysql",
-		connectstring)
+	db, err := sql.Open("mysql", connectstring)
 	if err != nil {
 		log.Error("Error opening Database: ", err.Error())
+		return
 	}
 	defer db.Close()
 
-	//Test Connection
+	// Test Connection
 	pingErr := db.Ping()
 	if pingErr != nil {
-		log.Error("Error testing DB Connection: ", err.Error())
+		log.Error("Error testing DB Connection: ", pingErr.Error())
+		return
 	}
 
 	// Define URL strings
@@ -349,10 +384,8 @@ func customers() {
 	storeid := os.Getenv("BIGCOMMERCE_STOREID")
 	limit := 250
 
-	// Define the Request URL
-	mindate := mindate() // Replace with your actual function to get the minimum date
-	log.Println("Min Date:", mindate)
-	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/customers/addresses"
+	// Define the Request URL with the correct query parameters
+	url = fmt.Sprintf("https://api.bigcommerce.com/stores/%s/v3/customers?include=addresses,storecredit,attributes,formfields,shopper_profile_id,segment_ids", storeid)
 
 	// Initialize progress bar (will be set after the first API call when we know total pages)
 	var bar *uiprogress.Bar
@@ -362,21 +395,20 @@ func customers() {
 
 	for {
 		// Construct the URL for the current page
-		apiUrl := fmt.Sprintf("%s?limit=%d&page=%d", url, limit, page)
+		apiUrl := fmt.Sprintf("%s&limit=%d&page=%d", url, limit, page)
 		customersResponse, err := getCustomers(apiUrl)
 		if err != nil {
 			log.Fatalf("Error fetching data for page %d: %v", page, err)
 		}
 
 		// Debug output for pagination metadata
-		log.Printf("Page %d Pagination Metadata: TotalPages=%d, CurrentPage=%d, PerPage=%d, Total=%d, Count=%d, TooMany=%t\n",
+		log.Printf("Page %d Pagination Metadata: TotalPages=%d, CurrentPage=%d, PerPage=%d, Total=%d, Count=%d\n",
 			page,
 			customersResponse.Meta.Pagination.TotalPages,
 			customersResponse.Meta.Pagination.CurrentPage,
 			customersResponse.Meta.Pagination.PerPage,
 			customersResponse.Meta.Pagination.Total,
-			customersResponse.Meta.Pagination.Count,
-			customersResponse.Meta.Pagination.TooMany)
+			customersResponse.Meta.Pagination.Count)
 
 		// If this is the first page, initialize the progress bar
 		if page == 1 {
@@ -412,50 +444,96 @@ func customers() {
 
 // Add Customers to the Database
 func printCustomers(customersResponse *CustomersResponse, db *sql.DB) {
-	// Define the maximum number of customers to batch in a single query
 	const batchSize = 100
 
-	// Prepare the base SQL statement
-	baseSQL := `
+	baseCustomerSQL := `
 		REPLACE INTO orders.customers_bc (
-			ID, CustomerID, FirstName, LastName, Company,
-			Address1, Address2, City, StateOrProvince, PostalCode,
-			Country, CountryCode, Phone, AddressType
+			CustomerID, Email, FirstName, LastName, Company, Phone, Notes,
+			TaxExemptCategory, CustomerGroupID, RegistrationIPAddress, DateCreated, DateModified,
+			AcceptsProductReviewAbandonedCartEmails, OriginChannelID
 		) VALUES `
 
-	// Create a slice to hold query value strings
-	valueStrings := make([]string, 0, batchSize)
-	// Create a slice to hold query arguments
-	valueArgs := make([]interface{}, 0, batchSize*14) // 14 fields per customer
+	baseAddressSQL := `
+		REPLACE INTO orders.customer_addresses_bc (
+			ID, CustomerID, FirstName, LastName, Address1, Address2, City,
+			StateOrProvince, PostalCode, CountryCode, Phone, AddressType, Country
+		) VALUES `
 
-	// Loop through each customer in the response
+	customerValueStrings := make([]string, 0, batchSize)
+	addressValueStrings := make([]string, 0, batchSize)
+
+	customerValueArgs := make([]interface{}, 0, batchSize*14)
+	addressValueArgs := make([]interface{}, 0, batchSize*13)
+
 	for i, customer := range customersResponse.Data {
-		// Construct the value string for this customer
-		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		// Debug log for customer being processed
+		logrus.Debugf("Processing customer: ID=%d, Email=%s", customer.ID, customer.Email)
+		// Convert DateCreated and DateModified to MySQL format
+		dateCreated, err := formatDateForMySQL(customer.DateCreated)
+		if err != nil {
+			logrus.Errorf("Error parsing DateCreated for customer ID %d: %v", customer.ID, err)
+			continue
+		}
+		dateModified, err := formatDateForMySQL(customer.DateModified)
+		if err != nil {
+			logrus.Errorf("Error parsing DateModified for customer ID %d: %v", customer.ID, err)
+			continue
+		}
 
-		// Add the customer fields to the valueArgs slice
-		valueArgs = append(valueArgs,
-			customer.ID, customer.CustomerID, customer.FirstName, customer.LastName, customer.Company,
-			customer.Address1, customer.Address2, customer.City, customer.StateOrProvince, customer.PostalCode,
-			customer.Country, customer.CountryCode, customer.Phone, customer.AddressType,
+		customerValueStrings = append(customerValueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
+		customerValueArgs = append(customerValueArgs,
+			customer.ID, customer.Email, customer.FirstName, customer.LastName, customer.Company,
+			customer.Phone, customer.Notes, customer.TaxExemptCategory, customer.CustomerGroupID,
+			customer.RegistrationIPAddress, dateCreated, dateModified,
+			customer.AcceptsProductReviewAbandonedCartEmails, customer.OriginChannelID,
 		)
 
-		// If we've reached the batch size limit or it's the last customer, execute the batch
-		if (i+1)%batchSize == 0 || i+1 == len(customersResponse.Data) {
-			// Combine the base SQL with the value strings
-			sql := baseSQL + strings.Join(valueStrings, ",")
+		// Debug log showing the customer values
+		logrus.Debugf("Customer values: %v", customerValueArgs[len(customerValueArgs)-14:])
 
-			// Execute the batch
-			_, err := db.Exec(sql, valueArgs...)
-			if err != nil {
-				log.Errorf("Error inserting batch: %v", err)
-			} else {
-				log.Debugf("Successfully inserted/updated batch of %d customers", len(valueStrings))
+		for _, address := range customer.Addresses {
+			// Debug log for address being processed
+			logrus.Debugf("Processing address: ID=%d, CustomerID=%d", address.ID, customer.ID)
+
+			addressValueStrings = append(addressValueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+			addressValueArgs = append(addressValueArgs,
+				address.ID, customer.ID, address.FirstName, address.LastName, address.Address1,
+				address.Address2, address.City, address.StateOrProvince, address.PostalCode, address.CountryCode,
+				address.Phone, address.AddressType, address.Country,
+			)
+
+			// Debug log showing the address values
+			logrus.Debugf("Address values: %v", addressValueArgs[len(addressValueArgs)-13:])
+		}
+
+		if (i+1)%batchSize == 0 || i+1 == len(customersResponse.Data) {
+			if len(customerValueStrings) > 0 {
+				customerSQL := baseCustomerSQL + strings.Join(customerValueStrings, ",")
+				// logrus.Debugf("Executing SQL for customers: %s", customerSQL)
+				_, err := db.Exec(customerSQL, customerValueArgs...)
+				if err != nil {
+					logrus.Errorf("Error inserting batch of customers: %v", err)
+				} else {
+					logrus.Debugf("Successfully inserted/updated batch of %d customers", len(customerValueStrings))
+				}
 			}
 
-			// Reset the slices for the next batch
-			valueStrings = valueStrings[:0]
-			valueArgs = valueArgs[:0]
+			if len(addressValueStrings) > 0 {
+				addressSQL := baseAddressSQL + strings.Join(addressValueStrings, ",")
+				// logrus.Debugf("Executing SQL for addresses: %s", addressSQL)
+				_, err := db.Exec(addressSQL, addressValueArgs...)
+				if err != nil {
+					logrus.Errorf("Error inserting batch of addresses: %v", err)
+				} else {
+					logrus.Debugf("Successfully inserted/updated batch of %d addresses", len(addressValueStrings))
+				}
+			}
+
+			customerValueStrings = customerValueStrings[:0]
+			customerValueArgs = customerValueArgs[:0]
+			addressValueStrings = addressValueStrings[:0]
+			addressValueArgs = addressValueArgs[:0]
 		}
 	}
 }

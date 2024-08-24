@@ -172,6 +172,14 @@ func fetchOrders(url string) (order, error) {
 	return orders, fmt.Errorf("failed to fetch orders from BigCommerce after %d attempts", maxRetries)
 }
 
+func formatDateForMySQL(dateStr string) (string, error) {
+	parsedTime, err := time.Parse(time.RFC3339, dateStr)
+	if err != nil {
+		return "", err
+	}
+	return parsedTime.Format("2006-01-02 15:04:05"), nil
+}
+
 func main() {
 	// Logging configuration
 	if os.Getenv("LOGLEVEL") == "DEBUG" {
