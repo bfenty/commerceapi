@@ -4,6 +4,7 @@ import (
 	// "encoding/csv"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 
 	// "log"
@@ -11,6 +12,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"strings"
 
 	"github.com/gosuri/uiprogress"
 	log "github.com/sirupsen/logrus"
@@ -66,6 +69,49 @@ type sku struct {
 	Modified  string
 	Price     float64
 	Skuimage  Image
+}
+
+// Customer Structs
+// Define the structs for the JSON structure
+type Address struct {
+	Address1        string `json:"address1"`
+	Address2        string `json:"address2"`
+	AddressType     string `json:"address_type"`
+	City            string `json:"city"`
+	Company         string `json:"company"`
+	Country         string `json:"country"`
+	CountryCode     string `json:"country_code"`
+	CustomerID      int    `json:"customer_id"`
+	FirstName       string `json:"first_name"`
+	ID              int    `json:"id"`
+	LastName        string `json:"last_name"`
+	Phone           string `json:"phone"`
+	PostalCode      string `json:"postal_code"`
+	StateOrProvince string `json:"state_or_province"`
+}
+
+type PaginationLinks struct {
+	Next    string `json:"next"`
+	Current string `json:"current"`
+}
+
+type MetaPagination struct {
+	Total       int             `json:"total"`
+	Count       int             `json:"count"`
+	PerPage     int             `json:"per_page"`
+	CurrentPage int             `json:"current_page"`
+	TotalPages  int             `json:"total_pages"`
+	Links       PaginationLinks `json:"links"`
+	TooMany     bool            `json:"too_many"`
+}
+
+type Meta struct {
+	Pagination MetaPagination `json:"pagination"`
+}
+
+type CustomersResponse struct {
+	Data []Address `json:"data"`
+	Meta Meta      `json:"meta"`
 }
 
 func mindate() (val string) {
@@ -278,4 +324,178 @@ func qty() {
 	}
 	// log.Debug("Final Data:", skulist)
 	// csvmake()
+}
+
+func customers() {
+
+	//open connection to database
+	log.Info("Opening DB Connection")
+	connectstring := os.Getenv("USER") + ":" + os.Getenv("PASS") + "@tcp(" + os.Getenv("SERVER") + ":" + os.Getenv("PORT") + ")/purchasing"
+	db, err := sql.Open("mysql",
+		connectstring)
+	if err != nil {
+		log.Error("Error opening Database: ", err.Error())
+	}
+	defer db.Close()
+
+	//Test Connection
+	pingErr := db.Ping()
+	if pingErr != nil {
+		log.Error("Error testing DB Connection: ", err.Error())
+	}
+
+	// Define URL strings
+	var url string
+	storeid := os.Getenv("BIGCOMMERCE_STOREID")
+	limit := 250
+
+	// Define the Request URL
+	mindate := mindate() // Replace with your actual function to get the minimum date
+	log.Println("Min Date:", mindate)
+	url = "https://api.bigcommerce.com/stores/" + storeid + "/v3/customers/addresses"
+
+	// Initialize progress bar (will be set after the first API call when we know total pages)
+	var bar *uiprogress.Bar
+
+	// Initialize page counter
+	page := 1
+
+	for {
+		// Construct the URL for the current page
+		apiUrl := fmt.Sprintf("%s?limit=%d&page=%d", url, limit, page)
+		customersResponse, err := getCustomers(apiUrl)
+		if err != nil {
+			log.Fatalf("Error fetching data for page %d: %v", page, err)
+		}
+
+		// Debug output for pagination metadata
+		log.Printf("Page %d Pagination Metadata: TotalPages=%d, CurrentPage=%d, PerPage=%d, Total=%d, Count=%d, TooMany=%t\n",
+			page,
+			customersResponse.Meta.Pagination.TotalPages,
+			customersResponse.Meta.Pagination.CurrentPage,
+			customersResponse.Meta.Pagination.PerPage,
+			customersResponse.Meta.Pagination.Total,
+			customersResponse.Meta.Pagination.Count,
+			customersResponse.Meta.Pagination.TooMany)
+
+		// If this is the first page, initialize the progress bar
+		if page == 1 {
+			totalpages := customersResponse.Meta.Pagination.TotalPages
+			log.Println("Total Pages:", totalpages)
+
+			uiprogress.Start()                                                     // start rendering
+			bar = uiprogress.AddBar(totalpages).AppendCompleted().PrependElapsed() // add a new bar
+			bar.PrependFunc(func(b *uiprogress.Bar) string {
+				return "Processing: " // prepend the current processing state
+			})
+		}
+
+		// Process the customer data
+		printCustomers(customersResponse, db)
+
+		// Update the progress bar
+		bar.Incr()
+		log.Println("Processed Page", page)
+
+		// Check if there are more pages to fetch
+		if page >= customersResponse.Meta.Pagination.TotalPages {
+			break // No more pages to fetch
+		}
+
+		// Increment the page number for the next iteration
+		page++
+	}
+
+	uiprogress.Stop() // stop the progress bar when done
+	log.Println("Customer data processing complete.")
+}
+
+// Add Customers to the Database
+func printCustomers(customersResponse *CustomersResponse, db *sql.DB) {
+	// Define the maximum number of customers to batch in a single query
+	const batchSize = 100
+
+	// Prepare the base SQL statement
+	baseSQL := `
+		REPLACE INTO orders.customers_bc (
+			ID, CustomerID, FirstName, LastName, Company,
+			Address1, Address2, City, StateOrProvince, PostalCode,
+			Country, CountryCode, Phone, AddressType
+		) VALUES `
+
+	// Create a slice to hold query value strings
+	valueStrings := make([]string, 0, batchSize)
+	// Create a slice to hold query arguments
+	valueArgs := make([]interface{}, 0, batchSize*14) // 14 fields per customer
+
+	// Loop through each customer in the response
+	for i, customer := range customersResponse.Data {
+		// Construct the value string for this customer
+		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
+		// Add the customer fields to the valueArgs slice
+		valueArgs = append(valueArgs,
+			customer.ID, customer.CustomerID, customer.FirstName, customer.LastName, customer.Company,
+			customer.Address1, customer.Address2, customer.City, customer.StateOrProvince, customer.PostalCode,
+			customer.Country, customer.CountryCode, customer.Phone, customer.AddressType,
+		)
+
+		// If we've reached the batch size limit or it's the last customer, execute the batch
+		if (i+1)%batchSize == 0 || i+1 == len(customersResponse.Data) {
+			// Combine the base SQL with the value strings
+			sql := baseSQL + strings.Join(valueStrings, ",")
+
+			// Execute the batch
+			_, err := db.Exec(sql, valueArgs...)
+			if err != nil {
+				log.Errorf("Error inserting batch: %v", err)
+			} else {
+				log.Debugf("Successfully inserted/updated batch of %d customers", len(valueStrings))
+			}
+
+			// Reset the slices for the next batch
+			valueStrings = valueStrings[:0]
+			valueArgs = valueArgs[:0]
+		}
+	}
+}
+
+// getCustomers fetches customer data from the API and unmarshals it into the CustomersResponse struct
+func getCustomers(apiUrl string) (*CustomersResponse, error) {
+	// Define the Request Client
+	commerceClient := http.Client{
+		Timeout: time.Second * 20, // Timeout after 20 seconds
+	}
+
+	// Create the HTTP Request
+	req, err := http.NewRequest(http.MethodGet, apiUrl, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	// Setup Header
+	req.Header.Set("User-Agent", "commerce-client")
+	req.Header.Add("x-auth-token", os.Getenv("BIGCOMMERCE_TOKEN"))
+
+	// Perform the Request
+	res, getErr := commerceClient.Do(req)
+	if getErr != nil {
+		return nil, fmt.Errorf("failed to perform request: %v", getErr)
+	}
+	defer res.Body.Close()
+
+	// Read the response body
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", readErr)
+	}
+
+	// Unmarshal the JSON data into the CustomersResponse struct
+	var customersResponse CustomersResponse
+	err = json.Unmarshal(body, &customersResponse)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
+	}
+
+	return &customersResponse, nil
 }
