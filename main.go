@@ -205,8 +205,8 @@ func main() {
 	// 	orderinsert(orders)
 	// }
 
-	// SSLoad()
-	// qty()
+	SSLoad()
+	qty()
 	customers()
 	log.Info("Completed update")
 }
