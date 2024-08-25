@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -189,21 +190,21 @@ func main() {
 	}
 	log.Info("Starting BigCommerce Update")
 
-	// limit := "250"
-	// minid := minorder() + 1
-	// log.Debug("Minimum order ID: ", minid)
+	limit := "250"
+	minid := minorder() + 1
+	log.Debug("Minimum order ID: ", minid)
 
-	// url := "https://api.bigcommerce.com/stores/" + os.Getenv("BIGCOMMERCE_STOREID") + "/v2/orders?min_id=" + strconv.Itoa(minid) + "&sort=id:asc&limit=" + limit
-	// log.Debug("URL: ", url)
+	url := "https://api.bigcommerce.com/stores/" + os.Getenv("BIGCOMMERCE_STOREID") + "/v2/orders?min_id=" + strconv.Itoa(minid) + "&sort=id:asc&limit=" + limit
+	log.Debug("URL: ", url)
 
-	// orders, err := fetchOrders(url)
-	// if err != nil {
-	// 	log.Error("Failed to fetch orders: ", err)
-	// } else {
+	orders, err := fetchOrders(url)
+	if err != nil {
+		log.Error("Failed to fetch orders: ", err)
+	} else {
 
-	// 	log.Info("Inserting Orders...")
-	// 	orderinsert(orders)
-	// }
+		log.Info("Inserting Orders...")
+		orderinsert(orders)
+	}
 
 	SSLoad()
 	qty()
