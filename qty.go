@@ -577,3 +577,80 @@ func getCustomers(apiUrl string) (*CustomersResponse, error) {
 
 	return &customersResponse, nil
 }
+
+// Insert BigCommerce Orders into the database
+func printOrders(ordersResponse []Order, db *sql.DB) {
+	const batchSize = 250
+
+	baseOrderSQL := `
+		REPLACE INTO orders.orders_bc (
+			ID, CustomerID, DateCreated, DateModified, DateShipped, StatusID, Status,
+			SubtotalExTax, SubtotalIncTax, SubtotalTax, BaseShippingCost, ShippingCostExTax, ShippingCostIncTax, ShippingCostTax, ShippingCostTaxClassID,
+			BaseHandlingCost, HandlingCostExTax, HandlingCostIncTax, HandlingCostTax, HandlingCostTaxClassID,
+			BaseWrappingCost, WrappingCostExTax, WrappingCostIncTax, WrappingCostTax, WrappingCostTaxClassID,
+			TotalExTax, TotalIncTax, TotalTax, ItemsTotal, ItemsShipped,
+			PaymentMethod, PaymentProviderID, PaymentStatus, RefundedAmount, OrderIsDigital, StoreCreditAmount,
+			GiftCertificateAmount, IPAddress, IPAddressV6, GeoipCountry, GeoipCountryISO2, CurrencyID,
+			CurrencyCode, CurrencyExchangeRate, DefaultCurrencyID, DefaultCurrencyCode, StaffNotes, CustomerMessage,
+			DiscountAmount, CouponDiscount
+		) VALUES `
+
+	orderValueStrings := make([]string, 0, batchSize)
+	orderValueArgs := make([]interface{}, 0, batchSize*52)
+
+	logrus.Debug("Parsing Dates")
+
+	for i, order := range ordersResponse {
+		// Convert dates to MySQL format
+		dateCreated, err := formatDateForMySQL(order.DateCreated)
+		if err != nil {
+			logrus.Errorf("Error parsing DateCreated for order ID %d: %v", order.ID, err)
+			continue
+		}
+		dateModified, err := formatDateForMySQL(order.DateModified)
+		if err != nil {
+			logrus.Errorf("Error parsing DateModified for order ID %d: %v", order.ID, err)
+			continue
+		}
+		dateShipped, err := formatDateForMySQL(order.DateShipped)
+		if err != nil {
+			logrus.Errorf("Error parsing DateShipped for order ID %d: %v", order.ID, err)
+			continue
+		}
+
+		//Debug
+		orderValueStrings = append(orderValueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
+		orderValueArgs = append(orderValueArgs,
+			order.ID, order.CustomerID, dateCreated, dateModified, dateShipped, order.StatusID, order.Status,
+			order.SubtotalExTax, order.SubtotalIncTax, order.SubtotalTax, order.BaseShippingCost, order.ShippingCostExTax, order.ShippingCostIncTax, order.ShippingCostTax, order.ShippingCostTaxClassID,
+			order.BaseHandlingCost, order.HandlingCostExTax, order.HandlingCostIncTax, order.HandlingCostTax, order.HandlingCostTaxClassID,
+			order.BaseWrappingCost, order.WrappingCostExTax, order.WrappingCostIncTax, order.WrappingCostTax, order.WrappingCostTaxClassID,
+			order.TotalExTax, order.TotalIncTax, order.TotalTax, order.ItemsTotal, order.ItemsShipped,
+			order.PaymentMethod, order.PaymentProviderID, order.PaymentStatus, order.RefundedAmount, order.OrderIsDigital, order.StoreCreditAmount,
+			order.GiftCertificateAmount, order.IPAddress, order.IPAddressV6, order.GeoipCountry, order.GeoipCountryISO2, order.CurrencyID,
+			order.CurrencyCode, order.CurrencyExchangeRate, order.DefaultCurrencyID, order.DefaultCurrencyCode, order.StaffNotes, order.CustomerMessage,
+			order.DiscountAmount, order.CouponDiscount,
+		)
+
+		// Debug log showing the order values
+		// logrus.Debugf("Order values: %v", orderValueArgs[len(orderValueArgs)-52:])
+
+		if (i+1)%batchSize == 0 || i+1 == len(ordersResponse) {
+			if len(orderValueStrings) > 0 {
+				orderSQL := baseOrderSQL + strings.Join(orderValueStrings, ",")
+				// logrus.Debugf("Executing SQL for orders: %s", orderSQL)
+				logrus.Debugf("Executing SQL for orders:")
+				_, err := db.Exec(orderSQL, orderValueArgs...)
+				if err != nil {
+					logrus.Errorf("Error inserting batch of orders: %v", err)
+				} else {
+					logrus.Debugf("Successfully inserted/updated batch of %d orders", len(orderValueStrings))
+				}
+			}
+
+			orderValueStrings = orderValueStrings[:0]
+			orderValueArgs = orderValueArgs[:0]
+		}
+	}
+}
